@@ -26,3 +26,23 @@ python drawing_app.py
 |------|----|
 | 실행 취소 | `Ctrl + Z` |
 | PNG 저장 | `Ctrl + S` |
+
+## 🛠 실행파일로 빌드 (PyInstaller)
+
+스크립트 하나로 플랫폼별 단일 실행파일을 만들 수 있습니다.
+
+```bash
+cd drawing_app
+./build.sh          # Linux / macOS
+# Windows (git-bash / MSYS):  bash build.sh
+```
+
+- Linux  → `dist/SimpleDrawing` (ELF)
+- macOS  → `dist/SimpleDrawing` + `.app` 번들 (`--windowed`)
+- Windows → `dist/SimpleDrawing.exe` (`--windowed`)
+
+`./build.sh --clean` 으로 `build/` `dist/` `*.spec` 을 정리할 수 있습니다.
+
+> ⚠️ PyInstaller 는 **빌드한 OS/아키텍처용 바이너리만 생성**합니다.
+> 예: Windows .exe 가 필요하면 Windows 에서 `build.sh` 를 실행하세요.
+> 크로스 빌드가 필요하면 각 OS 에 맞는 GitHub Actions 러너를 쓰는 것을 권장합니다.
