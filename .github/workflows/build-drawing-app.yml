@@ -1,0 +1,82 @@
+name: Build Drawing App
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "drawing_app/**"
+      - ".github/workflows/build-drawing-app.yml"
+  pull_request:
+    paths:
+      - "drawing_app/**"
+      - ".github/workflows/build-drawing-app.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: SimpleDrawing-linux-x86_64
+            bin: SimpleDrawing
+          - os: macos-latest
+            artifact: SimpleDrawing-macos-universal
+            bin: SimpleDrawing
+          - os: windows-latest
+            artifact: SimpleDrawing-windows-x86_64
+            bin: SimpleDrawing.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Tk (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Install Python dependencies
+        shell: bash
+        working-directory: drawing_app
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller Pillow
+
+      - name: Build executable
+        shell: bash
+        working-directory: drawing_app
+        run: |
+          EXTRA=()
+          case "$(uname -s)" in
+            Darwin*)              EXTRA+=(--windowed --osx-bundle-identifier com.hmt.simpledrawing) ;;
+            MINGW*|MSYS*|CYGWIN*) EXTRA+=(--windowed) ;;
+          esac
+          python -m PyInstaller \
+            --noconfirm --clean --onefile \
+            --name SimpleDrawing \
+            "${EXTRA[@]}" \
+            drawing_app.py
+
+      - name: Smoke test (Linux / macOS only — ensure binary loads)
+        if: runner.os != 'Windows'
+        shell: bash
+        working-directory: drawing_app
+        run: |
+          ls -lh dist/
+          file "dist/${{ matrix.bin }}" || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: drawing_app/dist/${{ matrix.bin }}
+          if-no-files-found: error
+          retention-days: 14

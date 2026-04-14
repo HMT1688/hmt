@@ -45,4 +45,19 @@ cd drawing_app
 
 > ⚠️ PyInstaller 는 **빌드한 OS/아키텍처용 바이너리만 생성**합니다.
 > 예: Windows .exe 가 필요하면 Windows 에서 `build.sh` 를 실행하세요.
-> 크로스 빌드가 필요하면 각 OS 에 맞는 GitHub Actions 러너를 쓰는 것을 권장합니다.
+
+### GitHub Actions 로 3대 OS 동시 빌드
+
+`.github/workflows/build-drawing-app.yml` 워크플로가 Linux / macOS / Windows
+러너에서 동시에 빌드하고 산출물을 업로드합니다.
+
+- **자동 실행**: `drawing_app/**` 변경이 브랜치에 push 되거나 PR 이 열릴 때
+- **수동 실행**: GitHub 의 Actions 탭 → "Build Drawing App" → **Run workflow**
+
+산출 아티팩트:
+- `SimpleDrawing-linux-x86_64`
+- `SimpleDrawing-macos-universal`
+- `SimpleDrawing-windows-x86_64`
+
+Actions 실행이 끝나면 해당 Run 페이지 아래의 **Artifacts** 섹션에서 각
+파일을 다운로드할 수 있습니다(보관 기간 14일).
