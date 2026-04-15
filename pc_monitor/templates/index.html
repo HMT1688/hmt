@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d12" />
+<title>📱 PC Monitor</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #0b0d12;
+               color: #e8eaf0; font-family: -apple-system, BlinkMacSystemFont,
+               "Segoe UI", Roboto, "Noto Sans KR", sans-serif; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center;
+           justify-content: center; overflow: hidden; }
+  #frame { max-width: 100%; max-height: 100%; image-rendering: auto;
+           touch-action: manipulation; user-select: none; -webkit-user-drag: none; }
+  #status { position: fixed; top: env(safe-area-inset-top, 8px); left: 8px;
+            padding: 4px 10px; border-radius: 999px; font-size: 12px;
+            background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
+            display: flex; gap: 8px; align-items: center; z-index: 10; }
+  #status .dot { width: 8px; height: 8px; border-radius: 50%;
+                 background: #f04; transition: background .2s; }
+  #status.live .dot { background: #2ecc71; }
+  #toggle { position: fixed; top: env(safe-area-inset-top, 8px); right: 8px;
+            padding: 6px 10px; border-radius: 10px; border: 0; color: #fff;
+            background: rgba(255,255,255,.12); backdrop-filter: blur(6px);
+            font-size: 13px; z-index: 10; }
+  #panel { position: fixed; left: 0; right: 0;
+           bottom: env(safe-area-inset-bottom, 0); padding: 12px 14px 18px;
+           background: linear-gradient(180deg, rgba(11,13,18,0), rgba(11,13,18,.92) 40%);
+           display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+           transform: translateY(110%); transition: transform .25s ease;
+           z-index: 9; }
+  #panel.open { transform: translateY(0); }
+  #panel label { font-size: 12px; opacity: .85; display: flex;
+                 justify-content: space-between; margin-bottom: 2px; }
+  #panel input[type=range], #panel select, #panel button {
+    width: 100%; background: rgba(255,255,255,.08); color: #fff;
+    border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
+    padding: 6px 8px; font-size: 13px; }
+  #panel .row-span { grid-column: 1 / span 2; display: flex; gap: 8px; }
+  #panel .row-span button { flex: 1; background: #2b6bff; border: 0; padding: 10px; font-weight: 600; }
+  #panel .row-span button.secondary { background: rgba(255,255,255,.1); }
+  #hint { position: fixed; inset: 0; display: flex; align-items: center;
+          justify-content: center; font-size: 14px; opacity: .7;
+          pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <img id="frame" alt="" />
+  <div id="hint">🔌 연결 대기 중…</div>
+</div>
+
+<div id="status" aria-live="polite">
+  <span class="dot"></span>
+  <span id="fps-label">0 fps</span>
+  <span id="size-label">–</span>
+</div>
+
+<button id="toggle" type="button">⚙️ 설정</button>
+
+<form id="panel" onsubmit="return false;">
+  <div>
+    <label>FPS <span id="v-fps">{{ default_fps }}</span></label>
+    <input id="i-fps" type="range" min="1" max="30" step="1" value="{{ default_fps|int }}" />
+  </div>
+  <div>
+    <label>품질 <span id="v-quality">{{ default_quality }}</span></label>
+    <input id="i-quality" type="range" min="20" max="95" step="5" value="{{ default_quality }}" />
+  </div>
+  <div>
+    <label>최대 폭 <span id="v-width">{{ default_max_width }}</span> px</label>
+    <input id="i-width" type="range" min="480" max="2560" step="80" value="{{ default_max_width }}" />
+  </div>
+  <div>
+    <label>모니터</label>
+    <select id="i-monitor"></select>
+  </div>
+  <div class="row-span">
+    <button id="btn-apply" type="button">적용</button>
+    <button id="btn-pause" type="button" class="secondary">⏸ 일시정지</button>
+    <button id="btn-full" type="button" class="secondary">⛶ 풀스크린</button>
+  </div>
+</form>
+
+<script>
+(() => {
+  const TOKEN = {{ token|tojson }};
+  const frame = document.getElementById('frame');
+  const hint = document.getElementById('hint');
+  const fpsLabel = document.getElementById('fps-label');
+  const sizeLabel = document.getElementById('size-label');
+  const status = document.getElementById('status');
+
+  const iFps = document.getElementById('i-fps');
+  const iQ   = document.getElementById('i-quality');
+  const iW   = document.getElementById('i-width');
+  const iM   = document.getElementById('i-monitor');
+  const vFps = document.getElementById('v-fps');
+  const vQ   = document.getElementById('v-quality');
+  const vW   = document.getElementById('v-width');
+
+  const panel = document.getElementById('panel');
+  document.getElementById('toggle').addEventListener('click', () => panel.classList.toggle('open'));
+
+  let ws = null;
+  let paused = false;
+  let backoff = 500;
+  let lastObjectUrl = null;
+  let frames = 0;
+  let fpsTimer = null;
+
+  function setLive(on) {
+    status.classList.toggle('live', !!on);
+  }
+
+  function updateLabels() {
+    vFps.textContent = iFps.value;
+    vQ.textContent   = iQ.value;
+    vW.textContent   = iW.value;
+  }
+  ['input','change'].forEach(ev => {
+    iFps.addEventListener(ev, updateLabels);
+    iQ.addEventListener(ev, updateLabels);
+    iW.addEventListener(ev, updateLabels);
+  });
+  updateLabels();
+
+  async function loadMonitors() {
+    try {
+      const r = await fetch(`/monitors?token=${encodeURIComponent(TOKEN)}`);
+      if (!r.ok) return;
+      const data = await r.json();
+      iM.innerHTML = '';
+      data.monitors.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.index;
+        opt.textContent = m.index === 0
+          ? `전체 (${m.width}×${m.height})`
+          : `#${m.index} (${m.width}×${m.height})`;
+        iM.appendChild(opt);
+      });
+      iM.value = String({{ default_monitor }});
+    } catch (e) { /* ignore */ }
+  }
+
+  function wsUrl() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const params = new URLSearchParams({
+      token: TOKEN,
+      fps: iFps.value,
+      quality: iQ.value,
+      max_width: iW.value,
+      monitor: iM.value || '1',
+    });
+    return `${proto}://${location.host}/ws?${params.toString()}`;
+  }
+
+  function connect() {
+    if (paused) return;
+    hint.textContent = '🔌 연결 중…';
+    hint.style.display = '';
+    try { ws && ws.close(); } catch(_) {}
+    ws = new WebSocket(wsUrl());
+    ws.binaryType = 'blob';
+
+    ws.onopen = () => {
+      backoff = 500;
+      setLive(true);
+      hint.style.display = 'none';
+    };
+    ws.onmessage = (ev) => {
+      if (paused || document.hidden) return;
+      const url = URL.createObjectURL(ev.data);
+      const prev = lastObjectUrl;
+      frame.onload = () => prev && URL.revokeObjectURL(prev);
+      frame.src = url;
+      lastObjectUrl = url;
+      frames++;
+      sizeLabel.textContent = `${Math.round(ev.data.size/1024)} KB`;
+    };
+    ws.onclose = () => {
+      setLive(false);
+      if (!paused) {
+        hint.textContent = `🔌 재연결 (${Math.round(backoff/1000)||'<1'}s)…`;
+        hint.style.display = '';
+        setTimeout(connect, backoff);
+        backoff = Math.min(backoff * 1.7, 8000);
+      }
+    };
+    ws.onerror = () => { /* onclose 가 이어서 호출됨 */ };
+  }
+
+  fpsTimer = setInterval(() => {
+    fpsLabel.textContent = `${frames} fps`;
+    frames = 0;
+  }, 1000);
+
+  document.getElementById('btn-apply').addEventListener('click', () => {
+    backoff = 500;
+    connect();
+    panel.classList.remove('open');
+  });
+
+  const btnPause = document.getElementById('btn-pause');
+  btnPause.addEventListener('click', () => {
+    paused = !paused;
+    btnPause.textContent = paused ? '▶ 재생' : '⏸ 일시정지';
+    if (paused) { try { ws && ws.close(); } catch(_) {} setLive(false); }
+    else connect();
+  });
+
+  document.getElementById('btn-full').addEventListener('click', () => {
+    const el = document.documentElement;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else el.requestFullscreen && el.requestFullscreen();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { try { ws && ws.close(); } catch(_) {} }
+    else if (!paused) connect();
+  });
+
+  loadMonitors().then(connect);
+})();
+</script>
+</body>
+</html>
