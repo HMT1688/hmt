@@ -37,6 +37,22 @@ def _banner(lines):
     print("└" + bar + "┘\n")
 
 
+def _print_qr(url: str) -> None:
+    """서버 접속 URL 을 터미널 ASCII QR 로 표시. qrcode 패키지가 없으면 조용히 스킵."""
+    try:
+        import qrcode
+    except ImportError:
+        log.info("(QR 코드 표시하려면  pip install qrcode  실행)")
+        return
+    qr = qrcode.QRCode(border=1, box_size=1,
+                       error_correction=qrcode.constants.ERROR_CORRECT_L)
+    qr.add_data(url)
+    qr.make(fit=True)
+    print("📷 폰 카메라로 스캔하세요:\n")
+    qr.print_ascii(invert=True)
+    print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="PC Monitor launcher")
     parser.add_argument("--host", default="0.0.0.0")
@@ -88,20 +104,24 @@ def main() -> None:
         tunnel.start()
         url = tunnel.wait_for_url(timeout=40)
         if url:
+            full = f"{url}/{qs}"
             _banner([
                 "📱 PC Monitor is live!",
-                f"Public URL : {url}/{qs}",
+                f"Public URL : {full}",
                 "아이디/비밀번호: MONITOR_USER / MONITOR_PASS",
             ])
+            _print_qr(full)
         else:
             log.error("Cloudflare Tunnel URL 을 확보하지 못했습니다.")
     else:
         from server import _get_lan_ip  # noqa: E402
         ip = _get_lan_ip()
+        full = f"http://{ip}:{args.port}/{qs}"
         _banner([
             "📺 PC Monitor (LAN)",
-            f"LAN URL : http://{ip}:{args.port}/{qs}",
+            f"LAN URL : {full}",
         ])
+        _print_qr(full)
 
     # 메인 스레드는 신호 대기
     stop_evt = threading.Event()
