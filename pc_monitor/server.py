@@ -21,6 +21,7 @@ import logging
 import os
 import secrets
 import socket
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -44,7 +45,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("pc_monitor")
 
-BASE_DIR = Path(__file__).resolve().parent
+# PyInstaller 로 frozen 될 경우 리소스는 _MEIPASS 에 풀린다.
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 app = FastAPI(title="PC Screen Mobile Monitor", version="1.0.0")

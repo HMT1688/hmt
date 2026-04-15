@@ -64,13 +64,48 @@ MONITOR_USER=me MONITOR_PASS=pw python run.py --remote --auto-token
 - 장기간 상시 운영이 필요하면 Cloudflare Access + 고정 터널(named tunnel) 사용을 권장합니다.
 - 이 앱은 개인 용도/임시 시청 목적으로 설계되어 있으며, 암호는 Basic Auth 특성상 HTTPS 상에서만 안전합니다.
 
+## 🪟 Windows 원클릭 실행 (.exe)
+
+Python 설치 없이 쓰고 싶으면 PyInstaller 로 단일 실행파일을 만들면 됩니다.
+
+### GitHub Actions 에서 자동 빌드
+`.github/workflows/build-pc-monitor.yml` 가 `pc_monitor/**` 변경 시마다
+Windows / macOS / Linux 3대 OS 빌드를 돌리고 아래 아티팩트를 업로드합니다:
+- `PCMonitorServer-windows-x86_64` → `PCMonitorServer.exe`
+- `PCMonitorServer-macos-universal` → `PCMonitorServer`
+- `PCMonitorServer-linux-x86_64` → `PCMonitorServer`
+
+Actions 탭 → "Build PC Monitor Server" → 최근 Run 의 **Artifacts** 에서 다운로드.
+
+### 로컬에서 직접 빌드
+```bash
+cd pc_monitor
+./build.sh          # 현재 OS 용
+./build.sh --clean  # 산출물 정리
+```
+
+### 사용 흐름 (Windows)
+1. `PCMonitorServer.exe` 다운로드
+2. **더블클릭** (필요 시 "추가 정보 ▸ 실행")
+3. 창에 배너 + QR 코드가 뜬다
+4. 폰 카메라로 QR 스캔 → 자동 생성된 토큰으로 바로 접속
+5. (선택) 로그인 프롬프트가 뜨면 미리 설정한 `MONITOR_USER`/`MONITOR_PASS` 입력
+
+> Basic Auth 자격증명은 환경변수로 전달하거나, exe 와 같은 폴더에 `.env` 파일을 두어 지정할 수 있습니다. 예:
+> ```
+> MONITOR_USER=me
+> MONITOR_PASS=strongpw
+> ```
+
 ## 📁 파일
 ```
 pc_monitor/
 ├── server.py              # FastAPI 본체 (캡처/스트림/인증)
-├── run.py                 # 통합 실행 엔트리 (LAN/Remote)
+├── run.py                 # 통합 실행 엔트리 (LAN/Remote, QR 출력)
+├── app_entry.py           # PyInstaller frozen entrypoint (--auto-token 기본)
 ├── tunnel.py              # Cloudflare Tunnel 런처
 ├── templates/index.html   # 모바일 뷰어
+├── build.sh               # PyInstaller onefile 빌드 스크립트
 ├── requirements.txt
 └── README.md
 ```
